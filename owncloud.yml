@@ -1,0 +1,132 @@
+- name: Install Owncloud
+  hosts: ubuntu
+  become: true
+
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+
+    - name: Install required packages
+      apt:
+        name:
+          - apache2
+          - mariadb-server
+          - libapache2-mod-php
+          - php-mysql
+          - php-xml
+          - php-zip
+          - php-intl
+          - php-gd
+          - php-mbstring
+          - php-curl
+          - php-imagick
+          - php-redis
+          - php-ssh2
+          - php-zip
+          - php-apcu
+          - openssl
+          - php-smbclient
+          - php-sqlite3
+          - php-pgsql
+          - python3-mysqldb
+          - python3-dev
+          - libmysqlclient-dev
+        state: present
+
+    - name: Configure Apache VirtualHost
+      template:
+        src: owncloud.conf.j2
+        dest: /etc/apache2/sites-available/owncloud.conf
+      notify:
+        - restart apache2
+
+    - name: Enable Owncloud VirtualHost
+      file:
+        src: /etc/apache2/sites-available/owncloud.conf
+        dest: /etc/apache2/sites-enabled/owncloud.conf
+        state: link
+      notify:
+        - restart apache2
+
+    - name: Configure PHP settings
+      template:
+        src: owncloud.php.ini.j2
+        dest: /etc/php/7.4/apache2/conf.d/owncloud.ini
+      notify:
+        - restart apache2
+
+    - name: Create Owncloud database
+      mysql_db:
+        name: owncloud
+        state: present
+        login_user: root
+        login_password: root
+        login_unix_socket: /var/run/mysqld/mysqld.sock
+
+    - name: Create Owncloud database user
+      mysql_user:
+        name: owncloud
+        password: owncloud
+        priv: owncloud.*:ALL
+        state: present
+        login_user: root
+        login_password: root
+        login_unix_socket: /var/run/mysqld/mysqld.sock
+
+    - name: Clone OwnCloud repository
+      get_url:
+        url: "https://download.owncloud.com/server/stable/owncloud-complete-latest.zip"
+        dest: "/tmp"
+      tags: [owncloud]
+
+    - name: Check if unzip command exists
+      ansible.builtin.stat:
+        path: /usr/bin/unzip
+      register: unzip_check
+
+    - name: Install unzip command if not present
+      ansible.builtin.package:
+        name: unzip
+        state: present
+      when: unzip_check.stat.exists == false
+
+    - name: Extract OwnCloud
+      unarchive:
+        src: "/tmp/owncloud-complete-latest.zip"
+        dest: "/var/www/html"
+        remote_src: yes
+        owner: www-data
+        group: www-data
+        mode: "0755"
+
+    - name: Set ownership and permissions for Owncloud
+      file:
+        path: /var/www/owncloud
+        owner: www-data
+        group: www-data
+        state: directory
+        recurse: yes
+
+    - name: Update permissions
+      file:
+        path: /var/www/owncloud/data
+        state: directory
+        owner: www-data
+        group: www-data
+
+    - name: Create syslink to available-sites
+      become: yes
+      file:
+        src: "/etc/apache2/sites-available/owncloud.conf"
+        dest: "/etc/apache2/sites-enabled/owncloud.conf"
+        state: link
+
+  handlers:
+    - name: restart apache2
+      service:
+        name: apache2
+        state: restarted

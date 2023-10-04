@@ -1,0 +1,18 @@
+<VirtualHost *:80>
+    
+    DocumentRoot /var/www/owncloud
+    Alias /owncloud "/var/www/owncloud/"
+     
+    <Directory /var/www/owncloud>
+        Options Indexes FollowSymLinks
+        AllowOverride All
+        Require all granted
+    </Directory>
+     
+     SetEnv HOME /var/www/owncloud
+     SetEnv HTTP_HOME /var/www/owncloud
+
+
+    ErrorLog ${APACHE_LOG_DIR}/owncloud_error.log
+    CustomLog ${APACHE_LOG_DIR}/owncloud_access.log combined
+</VirtualHost>
